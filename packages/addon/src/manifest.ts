@@ -1,22 +1,56 @@
-import { Manifest, ManifestCatalog } from 'stremio-addon-sdk';
-import {
-  DirectionKey,
-  humanReadableDirections,
-  humanReadableSortOptions,
-  toHumanReadable,
-} from './sort-option';
+import { Manifest, ManifestCatalog, ContentType } from 'stremio-addon-sdk';
+import { translations, DEFAULT_LANGUAGE } from './i18n';
+
 const { version, description } = require('../package.json');
 
+// Prepare catalog structure
 export const catalog: ManifestCatalog = {
-  id: 'easynews-plus-plus',
-  name: 'Easynews++',
-  type: 'tv',
+  id: 'easynews-catalogs',
+  name: 'Easynews Catalog',
+  type: 'tv' as ContentType,
   extra: [{ name: 'search', isRequired: true }],
 };
 
-// TODO: fix in '@types/stremio-addon-sdk'
-const sortOptions = humanReadableSortOptions as any;
-const directionOptions = humanReadableDirections as any;
+// Get the English translations for the initial setup
+const englishTranslations = translations[DEFAULT_LANGUAGE];
+
+// Language options for the preferred language selector
+const languageOptions = {
+  '': englishTranslations.languages.noPreference,
+  eng: englishTranslations.languages.english,
+  ger: englishTranslations.languages.german,
+  spa: englishTranslations.languages.spanish,
+  fre: englishTranslations.languages.french,
+  ita: englishTranslations.languages.italian,
+  jpn: englishTranslations.languages.japanese,
+  por: englishTranslations.languages.portuguese,
+  rus: englishTranslations.languages.russian,
+  kor: englishTranslations.languages.korean,
+  chi: englishTranslations.languages.chinese,
+} as any;
+
+// Sorting preference options
+const sortingOptions = {
+  quality_first: englishTranslations.sortingOptions.qualityFirst,
+  language_first: englishTranslations.sortingOptions.languageFirst,
+  size_first: englishTranslations.sortingOptions.sizeFirst,
+  date_first: englishTranslations.sortingOptions.dateFirst,
+  relevance_first: englishTranslations.sortingOptions.relevanceFirst,
+} as any;
+
+// Create UI language options
+const uiLanguageOptions = {
+  eng: 'English',
+  ger: 'Deutsch (German)',
+  spa: 'Español (Spanish)',
+  fre: 'Français (French)',
+  ita: 'Italiano (Italian)',
+  jpn: '日本語 (Japanese)',
+  por: 'Português (Portuguese)',
+  rus: 'Русский (Russian)',
+  kor: '한국어 (Korean)',
+  chi: '中文 (Chinese)',
+};
 
 export const manifest: Manifest = {
   id: 'community.easynews-plus-plus',
@@ -34,56 +68,38 @@ export const manifest: Manifest = {
   logo: 'https://pbs.twimg.com/profile_images/479627852757733376/8v9zH7Yo_400x400.jpeg',
   behaviorHints: { configurable: true, configurationRequired: true },
   config: [
-    { title: 'Username', key: 'username', type: 'text' },
-    { title: 'Password', key: 'password', type: 'password' },
+    { title: englishTranslations.form.username, key: 'username', type: 'text' },
     {
-      title:
-        "Strict Title Matching (to filter out results that don't exactly match the movie or series title)",
+      title: englishTranslations.form.password,
+      key: 'password',
+      type: 'password',
+    },
+    {
+      title: englishTranslations.form.strictTitleMatching,
       key: 'strictTitleMatching',
       type: 'checkbox',
       default: 'false',
     },
     {
-      title: 'Sort 1st',
-      key: 'sort1',
+      title: englishTranslations.form.preferredLanguage,
+      key: 'preferredLanguage',
       type: 'select',
-      options: sortOptions,
-      default: toHumanReadable('Size'),
+      options: languageOptions,
+      default: '',
     },
     {
-      title: 'Sort 1st direction',
-      key: 'sort1Direction',
+      title: englishTranslations.form.sortingMethod,
+      key: 'sortingPreference',
       type: 'select',
-      options: directionOptions,
-      default: 'Descending' satisfies DirectionKey,
+      options: sortingOptions,
+      default: 'quality_first',
     },
     {
-      title: 'Sort 2nd',
-      key: 'sort2',
+      title: englishTranslations.form.uiLanguage,
+      key: 'uiLanguage',
       type: 'select',
-      options: sortOptions,
-      default: toHumanReadable('Relevance'),
-    },
-    {
-      title: 'Sort 2nd direction',
-      key: 'sort2Direction',
-      type: 'select',
-      options: directionOptions,
-      default: 'Descending' satisfies DirectionKey,
-    },
-    {
-      title: 'Sort 3rd',
-      key: 'sort3',
-      type: 'select',
-      options: sortOptions,
-      default: toHumanReadable('DateTime'),
-    },
-    {
-      title: 'Sort 3rd direction',
-      key: 'sort3Direction',
-      type: 'select',
-      options: directionOptions,
-      default: 'Descending' satisfies DirectionKey,
+      options: uiLanguageOptions,
+      default: 'eng',
     },
   ],
 };

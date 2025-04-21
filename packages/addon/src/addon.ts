@@ -44,12 +44,8 @@ interface AddonConfig {
   password: string;
   customTitles?: string;
   strictTitleMatching?: string;
-  sort1?: string;
-  sort1Direction?: string;
-  sort2?: string;
-  sort2Direction?: string;
-  sort3?: string;
-  sort3Direction?: string;
+  preferredLanguage?: string;
+  sortingPreference?: string;
   logLevel?: string; // Add log level configuration option
   [key: string]: any;
 }
@@ -210,6 +206,9 @@ builder.defineMetaHandler(
   }) => {
     const { username, password, logLevel } = config;
 
+    // For language filtering in the catalog
+    const preferredLang = config.preferredLanguage || '';
+
     // Configure logger based on config
     if (logLevel) {
       logger.setLevel(logLevel);
@@ -271,6 +270,8 @@ builder.defineMetaHandler(
               size: getSize(file),
               url: `${createStreamUrl(res, username, password)}/${createStreamPath(file)}`,
               videoSize: file.rawSize,
+              file,
+              preferredLang: '',
             }),
           ],
         });
@@ -321,6 +322,8 @@ builder.defineStreamHandler(
       password,
       customTitles,
       strictTitleMatching,
+      preferredLanguage,
+      sortingPreference,
       logLevel,
       ...options
     } = config;
@@ -336,9 +339,10 @@ builder.defineStreamHandler(
       };
     }
 
-    // Include strictTitleMatching setting in cache key to ensure
+    // Include settings in cache key to ensure
     // users with different settings get different cache results
-    const cacheKey = `${id}:strict=${strictTitleMatching === 'on' || strictTitleMatching === 'true'}`;
+    const cacheKey = `${id}:v2:strict=${strictTitleMatching === 'on' || strictTitleMatching === 'true'}:lang=${preferredLanguage || ''}:sort=${sortingPreference}`;
+    logger.info(`Cache key: ${cacheKey}`);
     const cached = getFromCache<{ streams: Stream[] }>(cacheKey);
 
     if (cached) {
@@ -355,6 +359,12 @@ builder.defineStreamHandler(
         strictTitleMatching === 'on' || strictTitleMatching === 'true';
       logger.info(
         `Strict title matching: ${useStrictMatching ? 'enabled' : 'disabled'}`
+      );
+
+      // Get preferred language from configuration
+      const preferredLang = preferredLanguage || '';
+      logger.info(
+        `Preferred language: ${preferredLang ? preferredLang : 'No preference'}`
       );
 
       // Combine config-provided custom titles with titles from file
@@ -383,24 +393,59 @@ builder.defineStreamHandler(
         }
       }
 
-      // sort options
+      // For troubleshooting:
+      logger.info(`Sorting preference from config: ${sortingPreference}`);
+
+      // Configure API sorting options based on user sorting preference
       const sortOptions: Partial<SearchOptions> = {
         query: '', // Will be set for each search later
       };
 
-      // Process sort options
-      const sort1 = options.sort1 as string | undefined;
-      if (sort1) {
-        const sortValue = fromHumanReadable(sort1);
-        if (sortValue) {
-          sortOptions.sort1 = sortValue;
-        }
+      // Automatically set API sorting parameters based on sorting preference
+      switch (sortingPreference) {
+        case 'size_first':
+          sortOptions.sort1 = 'dsize'; // Size
+          sortOptions.sort1Direction = '-'; // Descending
+          sortOptions.sort2 = 'relevance';
+          sortOptions.sort2Direction = '-';
+          break;
+        case 'date_first':
+          sortOptions.sort1 = 'dtime'; // DateTime
+          sortOptions.sort1Direction = '-'; // Descending
+          sortOptions.sort2 = 'dsize';
+          sortOptions.sort2Direction = '-';
+          break;
+        case 'relevance_first':
+          sortOptions.sort1 = 'relevance'; // Relevance
+          sortOptions.sort1Direction = '-'; // Descending
+          sortOptions.sort2 = 'dsize';
+          sortOptions.sort2Direction = '-';
+          break;
+        case 'language_first':
+          // For language prioritization, relevance usually works best with the API
+          sortOptions.sort1 = 'relevance';
+          sortOptions.sort1Direction = '-';
+          sortOptions.sort2 = 'dsize';
+          sortOptions.sort2Direction = '-';
+          break;
+        case 'quality_first':
+        default:
+          // For quality prioritization, size is a good proxy for quality
+          sortOptions.sort1 = 'dsize'; // Size
+          sortOptions.sort1Direction = '-'; // Descending
+          sortOptions.sort2 = 'relevance';
+          sortOptions.sort2Direction = '-';
+          break;
       }
 
-      const sort1Direction = options.sort1Direction as string | undefined;
-      if (sort1Direction) {
-        sortOptions.sort1Direction = toDirection(sort1Direction);
-      }
+      // Set a reasonable third sort option for all cases
+      sortOptions.sort3 = 'dtime'; // DateTime
+      sortOptions.sort3Direction = '-'; // Descending
+
+      // Log the API sorting parameters
+      logger.info(
+        `API Sorting: ${sortOptions.sort1} (${sortOptions.sort1Direction}), ${sortOptions.sort2} (${sortOptions.sort2Direction}), ${sortOptions.sort3} (${sortOptions.sort3Direction})`
+      );
 
       const meta = await publicMetaProvider(id, type);
       logger.info(`Searching for: ${meta.name}`);
@@ -645,69 +690,223 @@ builder.defineStreamHandler(
               title,
               url: `${createStreamUrl(res, username, password)}/${createStreamPath(file)}`,
               videoSize: file.rawSize,
+              file,
+              preferredLang,
             })
           );
         }
       }
 
-      // Sort streams - prioritize higher quality videos
-      streams.sort((a, b) => {
-        // Extract description lines which contain size information
-        const aDesc = a.description?.split('\n') || [];
-        const bDesc = b.description?.split('\n') || [];
+      // Sort streams based on user preference
+      if (sortingPreference === 'language_first' && preferredLang) {
+        logger.info(
+          `Applying language-first sorting for language: ${preferredLang}`
+        );
 
-        // Extract quality from name
-        const aQuality = a.name?.includes('\n') ? a.name.split('\n')[1] : '';
-        const bQuality = b.name?.includes('\n') ? b.name.split('\n')[1] : '';
+        // Special handling for language-first sorting
+        // First, separate streams by language
+        const preferredLangStreams: Stream[] = [];
+        const otherStreams: Stream[] = [];
 
-        // Get quality scores (higher = better quality)
-        const getQualityScore = (quality: string): number => {
-          if (
-            quality?.includes('4K') ||
-            quality?.includes('2160p') ||
-            quality?.includes('UHD')
-          )
-            return 4;
-          if (quality?.includes('1080p')) return 3;
-          if (quality?.includes('720p')) return 2;
-          if (quality?.includes('480p')) return 1;
-          return 0; // unknown quality
+        // Split streams into two groups
+        for (const stream of streams) {
+          const file = (stream as any)._temp?.file;
+          const hasPreferredLang =
+            file?.alangs &&
+            Array.isArray(file.alangs) &&
+            file.alangs.includes(preferredLang);
+
+          if (hasPreferredLang) {
+            preferredLangStreams.push(stream);
+          } else {
+            otherStreams.push(stream);
+          }
+        }
+
+        logger.info(
+          `Found ${preferredLangStreams.length} streams with preferred language and ${otherStreams.length} other streams`
+        );
+
+        // Sort each group by quality and size
+        const sortByQualityAndSize = (a: Stream, b: Stream) => {
+          // Extract quality info
+          const aDesc = a.description?.split('\n') || [];
+          const bDesc = b.description?.split('\n') || [];
+          const aQuality = a.name?.includes('\n') ? a.name.split('\n')[1] : '';
+          const bQuality = b.name?.includes('\n') ? b.name.split('\n')[1] : '';
+
+          // Get quality scores
+          const getQualityScore = (quality: string): number => {
+            if (
+              quality?.includes('4K') ||
+              quality?.includes('2160p') ||
+              quality?.includes('UHD')
+            )
+              return 4;
+            if (quality?.includes('1080p')) return 3;
+            if (quality?.includes('720p')) return 2;
+            if (quality?.includes('480p')) return 1;
+            return 0;
+          };
+          const aScore = getQualityScore(aQuality);
+          const bScore = getQualityScore(bQuality);
+
+          // Compare quality scores
+          if (aScore !== bScore) {
+            return bScore - aScore;
+          }
+
+          // Compare sizes
+          const aSize = aDesc.length > 2 ? aDesc[2] : '';
+          const bSize = bDesc.length > 2 ? bDesc[2] : '';
+
+          if (aSize.includes('GB') && bSize.includes('GB')) {
+            const aGB = parseFloat(aSize.match(/[\d.]+/)?.[0] || '0');
+            const bGB = parseFloat(bSize.match(/[\d.]+/)?.[0] || '0');
+            if (aGB > bGB) return -1;
+            if (aGB < bGB) return 1;
+          }
+
+          if (aSize.includes('GB') && bSize.includes('MB')) return -1;
+          if (aSize.includes('MB') && bSize.includes('GB')) return 1;
+
+          if (aSize.includes('MB') && bSize.includes('MB')) {
+            const aMB = parseFloat(aSize.match(/[\d.]+/)?.[0] || '0');
+            const bMB = parseFloat(bSize.match(/[\d.]+/)?.[0] || '0');
+            if (aMB > bMB) return -1;
+            if (aMB < bMB) return 1;
+          }
+
+          return 0;
         };
 
-        const aScore = getQualityScore(aQuality);
-        const bScore = getQualityScore(bQuality);
+        // Sort each group independently
+        preferredLangStreams.sort(sortByQualityAndSize);
+        otherStreams.sort(sortByQualityAndSize);
 
-        // Higher score should come first
-        if (aScore !== bScore) {
-          return bScore - aScore; // Reverse order so higher score comes first
-        }
+        // Replace streams array with the concatenated sorted groups
+        streams.length = 0;
+        streams.push(...preferredLangStreams, ...otherStreams);
+      } else {
+        // Original sorting for other preferences
+        streams.sort((a, b) => {
+          // Extract stream data
+          const aFile = (a as any)._temp?.file;
+          const bFile = (b as any)._temp?.file;
+          const aHasPreferredLang =
+            preferredLang && aFile?.alangs?.includes(preferredLang);
+          const bHasPreferredLang =
+            preferredLang && bFile?.alangs?.includes(preferredLang);
 
-        // If same quality, prioritize by file size (larger typically better quality)
-        const aSize = aDesc.length > 2 ? aDesc[2] : '';
-        const bSize = bDesc.length > 2 ? bDesc[2] : '';
+          // Extract quality info
+          const aDesc = a.description?.split('\n') || [];
+          const bDesc = b.description?.split('\n') || [];
+          const aQuality = a.name?.includes('\n') ? a.name.split('\n')[1] : '';
+          const bQuality = b.name?.includes('\n') ? b.name.split('\n')[1] : '';
 
-        // Simple size comparison for GB files
-        if (aSize.includes('GB') && bSize.includes('GB')) {
-          const aGB = parseFloat(aSize.match(/[\d.]+/)?.[0] || '0');
-          const bGB = parseFloat(bSize.match(/[\d.]+/)?.[0] || '0');
-          if (aGB > bGB) return -1;
-          if (aGB < bGB) return 1;
-        }
+          // Get quality scores
+          const getQualityScore = (quality: string): number => {
+            if (
+              quality?.includes('4K') ||
+              quality?.includes('2160p') ||
+              quality?.includes('UHD')
+            )
+              return 4;
+            if (quality?.includes('1080p')) return 3;
+            if (quality?.includes('720p')) return 2;
+            if (quality?.includes('480p')) return 1;
+            return 0;
+          };
+          const aScore = getQualityScore(aQuality);
+          const bScore = getQualityScore(bQuality);
 
-        // Compare MB to GB (GB is always larger)
-        if (aSize.includes('GB') && bSize.includes('MB')) return -1;
-        if (aSize.includes('MB') && bSize.includes('GB')) return 1;
+          // Size comparison logic
+          const compareSize = () => {
+            const aSize = aDesc.length > 2 ? aDesc[2] : '';
+            const bSize = bDesc.length > 2 ? bDesc[2] : '';
 
-        // Compare MB files
-        if (aSize.includes('MB') && bSize.includes('MB')) {
-          const aMB = parseFloat(aSize.match(/[\d.]+/)?.[0] || '0');
-          const bMB = parseFloat(bSize.match(/[\d.]+/)?.[0] || '0');
-          if (aMB > bMB) return -1;
-          if (aMB < bMB) return 1;
-        }
+            if (aSize.includes('GB') && bSize.includes('GB')) {
+              const aGB = parseFloat(aSize.match(/[\d.]+/)?.[0] || '0');
+              const bGB = parseFloat(bSize.match(/[\d.]+/)?.[0] || '0');
+              if (aGB > bGB) return -1;
+              if (aGB < bGB) return 1;
+            }
 
-        return 0;
-      });
+            if (aSize.includes('GB') && bSize.includes('MB')) return -1;
+            if (aSize.includes('MB') && bSize.includes('GB')) return 1;
+
+            if (aSize.includes('MB') && bSize.includes('MB')) {
+              const aMB = parseFloat(aSize.match(/[\d.]+/)?.[0] || '0');
+              const bMB = parseFloat(bSize.match(/[\d.]+/)?.[0] || '0');
+              if (aMB > bMB) return -1;
+              if (aMB < bMB) return 1;
+            }
+
+            return 0;
+          };
+
+          // Apply sorting based on user preference
+          switch (sortingPreference) {
+            case 'size_first':
+              // Size first, then quality, then language
+              const sizeCompare = compareSize();
+              if (sizeCompare !== 0) {
+                return sizeCompare;
+              }
+              if (aScore !== bScore) {
+                return bScore - aScore;
+              }
+              if (aHasPreferredLang !== bHasPreferredLang) {
+                return aHasPreferredLang ? -1 : 1;
+              }
+              return 0;
+
+            case 'date_first':
+              // We don't sort heavily by date locally - the API already did that
+              // Just do minimal local sorting for quality/language
+              if (aScore !== bScore) {
+                return bScore - aScore;
+              }
+              if (aHasPreferredLang !== bHasPreferredLang) {
+                return aHasPreferredLang ? -1 : 1;
+              }
+              return 0;
+
+            case 'relevance_first':
+              // For relevance, we primarily rely on the API sorting
+              // Just minimal quality and language adjustments
+              if (aScore !== bScore) {
+                return bScore - aScore;
+              }
+              if (aHasPreferredLang !== bHasPreferredLang) {
+                return aHasPreferredLang ? -1 : 1;
+              }
+              return 0;
+
+            case 'lang_first':
+            case 'language_first':
+              // Quality first, then language, then size
+              if (aHasPreferredLang !== bHasPreferredLang) {
+                return aHasPreferredLang ? -1 : 1;
+              }
+              if (aScore !== bScore) {
+                return bScore - aScore;
+              }
+              return compareSize();
+
+            case 'quality_first':
+            default:
+              // Quality first (default), then language, then size
+              if (aScore !== bScore) {
+                return bScore - aScore;
+              }
+              if (aHasPreferredLang !== bHasPreferredLang) {
+                return aHasPreferredLang ? -1 : 1;
+              }
+              return compareSize();
+          }
+        });
+      }
 
       // Limit to top 25 streams to prevent overwhelming the player
       // No need to slice here since we're already limiting results at the API level
@@ -741,6 +940,8 @@ function mapStream({
   fileExtension,
   videoSize,
   url,
+  file,
+  preferredLang,
 }: {
   title: string;
   url: string;
@@ -751,22 +952,43 @@ function mapStream({
   duration: string | undefined;
   size: string | undefined;
   fullResolution: string | undefined;
+  file: any;
+  preferredLang: string;
 }): Stream {
   const quality = getQuality(title, fullResolution);
 
-  return {
+  // Log language information for debugging
+  if (file.alangs) {
+    logger.info(
+      `Stream "${title}" has languages: ${JSON.stringify(file.alangs)}`
+    );
+  } else {
+    logger.info(`Stream "${title}" has no language information`);
+  }
+
+  // Show language information in the description if available
+  const languageInfo = file.alangs?.length
+    ? `🌐 ${file.alangs.join(', ')}${preferredLang && file.alangs.includes(preferredLang) ? ' ⭐' : ''}`
+    : '🌐 Unknown';
+
+  const stream: Stream & { _temp?: any } = {
     name: `Easynews++${quality ? `\n${quality}` : ''}`,
     description: [
       `${title}${fileExtension}`,
       `🕛 ${duration ?? 'unknown duration'}`,
       `📦 ${size ?? 'unknown size'}`,
+      languageInfo,
     ].join('\n'),
     url: url,
     behaviorHints: {
       notWebReady: true,
       filename: `${title}${fileExtension}`,
     },
+    // Add temporary property with file data for sorting
+    _temp: { file },
   };
+
+  return stream;
 }
 
 function getCacheOptions(itemsLength: number): Partial<Cache> {
