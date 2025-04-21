@@ -75,6 +75,6 @@ if ((addonInterface.manifest.config || []).length > 0) {
   });
 }
 
-app.route('/', addonRouter);
+app.route('/easynews', addonRouter);
 
 export default app;
