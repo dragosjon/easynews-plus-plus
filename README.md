@@ -13,15 +13,13 @@
 
 ## 🔗 Quick Links
 
-**Public instance:** [https://easynews-cloudflare-worker.jqrw92fchz.workers.dev/configure](https://easynews-cloudflare-worker.jqrw92fchz.workers.dev/configure) or [https://en.pantelx.com](https://en.pantelx.com)
+**Public Instance:** [https://easynews-cloudflare-worker.jqrw92fchz.workers.dev/configure](https://easynews-cloudflare-worker.jqrw92fchz.workers.dev/configure) or [https://en.pantelx.com](https://en.pantelx.com)
 
 **Discord Server:** [Join our Discord](https://discord.gg/Ma4SnagqwE) for community discussions and support
 
-**Self-hosting:** [Check out the Self-Hosting Guide](#%EF%B8%8F-self-hosting-guide)
+**Self-Hosting:** [Check out the Self-Hosting Guide](#%EF%B8%8F-self-hosting-guide)
 
-**Changelog:** [View all changes](./CHANGELOG.md)
-
-**Support the project:** [Buy Me A Coffee](https://buymeacoffee.com/pantel)
+**Support the Project:** [Buy Me A Coffee](https://buymeacoffee.com/pantel)
 
 ---
 
@@ -53,24 +51,28 @@
 - Intelligent handling of alternative titles and custom titles
 - Support for original titles, custom titles and metadata alternatives
 - Partial matching for related title variants
-- Custom title addition via custom-titles.json file (self-hosted version)
+- Custom title addition via custom-titles.json file
 
 > [!NOTE]  
 > To add custom titles to the public instance, please create a new issue with your suggestions.
 
-### 🌍 Language Filtering
+### 🔧 Advanced Configuration Options & Language Filtering
+
+- Quality filtering to display only streams with specific resolutions
+- Customizable maximum results per quality to balance stream variety and performance
+- File size limitation to filter out excessively large files
 
 - Preferred audio language selection from multiple supported options
-- Automatic prioritization of content in your preferred language
-- Clear language labeling in stream descriptions
-- Visual indicators for preferred language content (⭐)
+  - Automatic prioritization of content in your preferred language
+  - Clear language labeling in stream descriptions
+  - Visual indicators for preferred language content (⭐)
 
 > [!NOTE]  
 > If you would like additional languages added to the public instance, please create a new issue with your request.
 
 ### 🌐 Multi-Language UI Support
 
-- Full UI translation support for 10 languages:
+- Full UI translation support for 13 languages:
   - English (default)
   - German (Deutsch)
   - Spanish (Español)
@@ -81,6 +83,9 @@
   - Russian (Русский)
   - Korean (한국어)
   - Chinese (中文)
+  - Dutch (Nederlands)
+  - Romanian (Română)
+  - Bulgarian (Български)
 - Seamless language switching without losing configuration
 - Translated form fields, options, and descriptions
 - Consistent UI experience across all supported languages
@@ -90,6 +95,38 @@
 - Seamless operation across multiple streaming platforms
 - Optimized for Stremio, Omni, Vidi and Fusion compatibility
 - Authentication implementation that works without basic auth headers for media streaming
+
+#### ✅ **Fully Supported & Tested:**
+
+- tvOS (Omni & Vidi)
+- iOS (Fusion)
+- Stremio
+  - Windows 4.x
+  - Windows 5.x (beta)
+  - Linux
+  - Web (Browser)
+  - Android Mobile (beta)
+
+#### ⚠️ **Should Work (Untested):**
+
+- Stremio:
+  - macOS
+  - Android TV
+  - Android Mobile (stable)
+  - Steam Deck
+  - Raspberry Pi
+  - Sony TV
+  - Philips TV
+
+#### ❌ **Currently Not Supported:**
+
+- Stremio:
+  - webOS (confirmed not working)
+  - iOS
+  - Samsung TV
+
+> [!NOTE]  
+> We are actively working on expanding platform support. If you encounter any issues with a specific platform, please report them in our [Discord community](https://discord.gg/Ma4SnagqwE) or create a new issue on GitHub.
 
 ---
 
@@ -110,7 +147,17 @@ $ docker build -t easynews-plus-plus .
 $ docker run -p 8080:1337 easynews-plus-plus
 ```
 
+Alternatively, you can use the pre-built Docker image from GitHub Container Registry:
+
+```bash
+$ docker pull ghcr.io/pantelx/easynews-plus-plus:latest
+$ docker run -p 8080:1337 ghcr.io/pantelx/easynews-plus-plus:latest
+```
+
 Verify the installation by visiting `http://localhost:8080/` in your browser.
+
+> [!NOTE]  
+> The Docker image is automatically built and published to GitHub Container Registry (ghcr.io) for each push to the main branch and for each new version tag. You can find all available tags on the [GitHub Packages page](https://github.com/pantelx/easynews-plus-plus/pkgs/container/easynews-plus-plus).
 
 ### 📦 Source Installation
 
@@ -128,13 +175,13 @@ $ npm -v
 $ git clone https://github.com/pantelx/easynews-plus-plus.git && cd easynews-plus-plus
 $ npm i
 # Start in production mode
-$ npm run start:addon
+$ npm run start
 ```
 
 Access the addon at `http://localhost:1337/`. Customize the port using the `PORT` environment variable:
 
 ```bash
-$ PORT=8080 npm run start:addon
+$ PORT=8080 npm run start
 ```
 
 ### ☁️ Cloud Deployment
@@ -173,21 +220,28 @@ Development modes:
 
 ```bash
 # Addon development
-$ npm run start:addon:dev
+$ npm run dev
 # Cloudflare worker development
-$ npm run start:cf:dev
+$ npm run dev:cf
 ```
 
 ### 📝 Release Process
 
-Create a new version tag and release:
+Bump the version tag, release and publish to npm:
 
 ```bash
 $ npm run release
 ```
 
 > [!NOTE]  
-> This will only create a new version tag and release on GitHub if the script found fix or feat commits since the latest tag.
+> Enable workflow "docker-publish" to automatically build and publish the docker image to GitHub Container Registry. Enable workflow "release" to automatically create a new version tag and release on GitHub.
+
+### 📦 Workflows
+
+- `pr.yml`: Lint PR titles
+- `test.yml`: Test if the addon works as expected
+- `release.yml`: Release a new version to GitHub
+- `docker-publish.yml`: Build and publish the docker image to GitHub Container Registry
 
 ---
 

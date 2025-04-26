@@ -1,19 +1,21 @@
 {
-  "name": "@easynews-plus-plus/core",
-  "version": "2.0.0",
+  "name": "easynews-plus-plus",
+  "version": "2.3.0",
   "main": "dist/server.js",
   "scripts": {
-    "test": "npm run build && npm run test --workspaces",
+    "test": "npm run test --workspaces",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
     "build": "npm -w packages/api run build && npm -w packages/addon run build",
-    "start:addon": "npm run build && npm -w packages/addon start",
-    "start:addon:dev": "npm run build && npm -w packages/addon run start:dev",
-    "start:cf:dev": "npm run build && npm -w packages/cloudflare-worker run dev",
+    "start": "npm -w packages/addon start",
+    "dev": "npm -w packages/addon run start:dev",
+    "dev:cf": "npm -w packages/cloudflare-worker run dev",
     "deploy:cf": "npm run build && npm -w packages/cloudflare-worker run deploy",
     "deploy:beamup": "beamup",
     "preview:cf": "npm run build && npm -w packages/cloudflare-worker run preview",
-    "sync-versions": "node packages/scripts/sync-versions.js",
-    "release": "bash ./packages/scripts/release.sh"
+    "release": "bumpp && npm run publish:npm",
+    "publish:npm": "bash ./packages/scripts/npm-publish.sh"
   },
   "keywords": [
     "stremio easynews addon",
@@ -33,10 +35,29 @@
     "@types/express": "^5.0.1",
     "@types/node": "^20.14.10",
     "beamup-cli": "^1.3.0",
-    "cross-env": "^7.0.3",
     "prettier": "^3.3.2",
     "tsx": "^4.16.2",
     "typescript": "^5.8.3",
     "vitest": "^2.1.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/panteLx/easynews-plus-plus.git"
+  },
+  "homepage": "https://github.com/panteLx/easynews-plus-plus",
+  "bugs": {
+    "url": "https://github.com/panteLx/easynews-plus-plus/issues"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "bumpp": "^10.1.0"
   }
 }
