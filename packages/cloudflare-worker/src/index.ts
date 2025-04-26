@@ -62,7 +62,7 @@ if ((addonInterface.manifest.config || []).length > 0) {
     const lang = c.req.query('lang') || '';
     const redirectUrl = lang ? `/configure?lang=${lang}` : '/configure';
     console.log(`Cloudflare worker: Redirecting to ${redirectUrl}`);
-    return c.redirect(redirectUrl);
+    return c.redirect(redirectUrl); 
   });
 }
 
